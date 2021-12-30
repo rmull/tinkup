@@ -142,7 +142,11 @@ class Tink:
         else:
             sys.exit(-1)
 
-        self.tx_packet(self.cmd['CmdGetVer'])
+        retries=5
+        while retries:
+            retries = retries - 1
+            self.tx_packet(self.cmd['CmdGetVer'])
+            time.sleep(1)
 
 if __name__ == '__main__':
     signal(SIGINT, sig_handler)
