@@ -33,9 +33,9 @@ class Tink:
             'CmdWrite':     b'\x03',
             'ResWrite':     b'\x03\x63\x30',
             'JumpApp':      b'\x05',
-            'SOH':          b'\x01',
-            'EOT':          b'\x04',
-            'DLE':          b'\x10',
+            'SOH':          1,
+            'EOT':          4,
+            'DLE':          16,
             }
     
     serial = None
@@ -98,17 +98,18 @@ class Tink:
             print('TX failure, serial port not writeable')
 
     def tx_packet(self, b):
-        b = bytearray(b)
+        b = list(b)
         crc = self.calc_crc(b)
         b.append(crc & 0xFF)
         b.append((crc >> 8) & 0xFF)
-        b_tx = bytearray(self.cmd['SOH'])
+        b_tx = [int(self.cmd['SOH'])]
         for bb in b:
             if bb == self.cmd['SOH'] or bb == self.cmd['EOT'] or bb == self.cmd['DLE']:
                 b_tx.append(self.cmd['DLE'])
             b_tx.append(bb)
-        b_tx.extend(self.cmd['DLE'])
-        self.tx(b_tx)
+        b_tx.append(self.cmd['EOT'])
+        print(b_tx)
+        self.tx(bytearray(b_tx))
 
     def __init__(self, port=None):
         comports = []
@@ -123,7 +124,7 @@ class Tink:
         if comports:
             for com in comports:
                 try:
-                    self.serial = serial.Serial(com, baudrate=115200, timeout=None)
+                    self.serial = serial.Serial(com, baudrate=115200, timeout=None, rtscts=True)
                     print('Opened device at %s' % com)
                     self.running = True
                 except:
@@ -143,7 +144,7 @@ class Tink:
             sys.exit(-1)
 
         retries=5
-        while retries:
+        while retries and running:
             retries = retries - 1
             self.tx_packet(self.cmd['CmdGetVer'])
             time.sleep(1)
