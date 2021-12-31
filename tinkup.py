@@ -23,23 +23,36 @@ def sig_handler(signal_received, frame):
     print('Got SIGINT, quitting')
     on_closing()
 
-
 class Tink:
     cmd = {
             'CmdGetVer':    b'\x01', 
-            'ResGetVer':    b'\x01\x01\x00\x01\x04',
             'CmdErase':     b'\x02',
-            'ResErase':     b'\x02\x42\x20',
             'CmdWrite':     b'\x03',
-            'ResWrite':     b'\x03\x63\x30',
             'JumpApp':      b'\x05',
-            'SOH':          1,
-            'EOT':          4,
-            'DLE':          16,
+            }
+    ctrl = {
+            'SOH':          b'\x01',
+            'EOT':          b'\x04',
+            'DLE':          b'\x10',
             }
     
+    rxfsm = {
+            'RxIdle':       0,
+            'RxBuffer':     1,
+            'RxEscape':     2,
+            }
+
+    blfsm = {
+            'BlIdle':       0,
+            'BlVersion':    1,
+            'BlErase':      2,
+            'BlWrite':      3,
+            'BlJump':       4,
+            }
+
     serial = None
-    rx_buffer = []
+    rx_state = rxfsm['RxIdle']
+    bl_state = blfsm['BlIdle']
 
     def timer(self, timestamp):
         # 100ms interval timer
@@ -47,29 +60,8 @@ class Tink:
             timestamp += 0.1
             self.timer_thread = threading.Timer(timestamp - time.time(), self.timer, args=(timestamp,)).start()
 
-    def rx_parse(self, b, debug=DEBUG):
-        if debug:
-            print('RX: %s' % b.hex())
-
-    def rx(self):
-        while running:
-            if self.serial:
-                try:
-                    b = self.serial.read(1)
-                    if b:
-                        self.rx_parse(b)
-                    else:
-                        print('RX timeout?')
-                except:
-                    print('Serial device failure, quitting')
-                    on_closing()
-            else:
-                print('Lost serial port')
-                time.sleep(1)
-
     def calc_crc(self, b):
         # NOTE: This is the CRC lookup table for polynomial 0x1021
-        # TODO: Needs testing
         lut = [
             0, 4129, 8258, 12387,\
             16516, 20645, 24774, 28903,\
@@ -82,8 +74,127 @@ class Tink:
             num4 = (lut[num3 & 0x0F] ^ (num1 << 4)) & 0xFFFF
             num5 = (num4 >> 12) ^ num2
             num1 = (lut[num5 & 0x0F] ^ (num4 << 4)) & 0xFFFF
-
         return num1
+
+    def rx_process(self, packet, debug=DEBUG):
+        if debug:
+            print('Processing packet: %s' % packet.hex())
+
+        crc_rx = (packet[-1] << 8) | packet[-2]
+        if self.calc_crc(packet[0:-2]) != crc_rx:
+            print('Bad CRC received, resetting state')
+            self.bl_state == self.blfsm['BlIdle']
+
+        else:
+            if self.bl_state == self.blfsm['BlVersion']:
+                if packet[0] == self.cmd['CmdGetVer']:
+                    print('Found device ID: %s' % packet[1:].decode().split('\x00')[0])
+
+                    print('Erasing device... ', end='')
+                    self.tx_packet(self.cmd['CmdErase'])
+                    self.bl_state = self.blfsm['BlErase']
+                else:
+                    print('ERROR: Unexpected response code')
+
+            elif self.bl_state == self.blfsm['BlErase']:
+                if packet[0] == self.cmd['CmdErase']:
+                    print('OKAY')
+
+                    self.hex_offset = 0
+                    self.hex_data = []
+                    self.hex_blocksz = 32
+                    # TODO: Populate hex_data
+                    # TODO: Check blocksz
+                    tx = bytearray(self.cmd['CmdWrite'])
+                    tx += self.hex_data[self.hex_offset:self.hex_offset + self.hex_blocksz]
+                    print('Writing firmware %d/%d... ' % (self.hex_offset, len(self.hex_data)), end='')
+                    self.tx_packet(tx)
+                    self.hex_offset = self.hex_offset + self.hex_blocksz
+                    self.bl_state = self.blfsm['BlWrite']
+                else:
+                    print('ERROR: Unexpected response code')
+
+            elif self.bl_state == self.blfsm['BlWrite']:
+                if packet[0] == self.cmd['CmdWrite']:
+                    print('OKAY')
+                    if self.hex_offset >= len(self.hex_data):
+                        print('Booting app... ', end='')
+                        self.bl_state = self.blfsm['BlJump']
+                        self.tx_packet(self.cmd['JumpApp'])
+
+                    else:
+                        tx = bytearray(self.cmd['CmdWrite'])
+                        tx += self.hex_data[self.hex_offset:self.hex_offset + self.hex_blocksz]
+                        print('Writing firmware %d/%d... ' % (self.hex_offset, len(self.hex_data)), end='')
+                        self.tx_packet(tx)
+                        self.hex_offset = self.hex_offset + self.hex_blocksz
+
+                else:
+                    print('ERROR: Unexpected response code')
+
+            elif self.bl_state == self.blfsm['BlJump']:
+                # TODO: Not sure yet whether JumpApp generates a response before booting
+                if packet[0] == self.cmd['JumpApp']:
+                    print('OKAY')
+                    print('Update complete')
+                    on_closing()
+
+    def rx_buffer(self, b, debug=DEBUG):
+        state_begin = self.rx_state
+
+        if self.rx_state == self.rxfsm['RxIdle']:
+            # Ignore bytes until we see SOH
+            if b == self.ctrl['SOH']:
+                self.rxbuf = bytearray()
+                self.rx_state = self.rxfsm['RxBuffer']
+
+        elif self.rx_state == self.rxfsm['RxBuffer']:
+            if b == self.ctrl['DLE']:
+                # Escape the next control sequence
+                self.rx_state = self.rxfsm['RxEscape']
+
+            elif b == self.ctrl['EOT']:
+                # End of transmission
+                self.rx_state = self.rxfsm['RxIdle']
+                rx_process(self.rxbuf)
+
+            else:
+                # Buffer the byte
+                self.rxbuf += b
+
+        elif self.rx_state == self.rxfsm['RxEscape']:
+            # Unconditionally buffer any byte following the escape sequence
+            self.rxbuf += b
+            self.rx_state = self.rxfsm['RxBuffer']
+
+        else:
+            # Shouldn't get here
+            print('Unknown state')
+            self.rx_state = self.rxfsm['RxIdle']
+
+        if debug:
+            keys = list(self.rxfsm.keys())
+            vals = list(self.rxfsm.values())
+            s0 = vals.index(state_begin)
+            s1 = vals.index(self.rx_state)
+            print('RX: %s, RX FSM state: %s -> %s' % (b.hex(), keys[s0], keys[s1]))
+
+
+    def rx(self):
+        while running:
+            if self.serial:
+                try:
+                    b = self.serial.read(1)
+                    if b:
+                        self.rx_buffer(b)
+                    else:
+                        print('RX timeout?')
+                except:
+                    print('Serial device failure, quitting')
+                    on_closing()
+            else:
+                print('Lost serial port')
+                time.sleep(1)
 
     def tx(self, b, debug=DEBUG):
         if debug:
@@ -98,20 +209,24 @@ class Tink:
             print('TX failure, serial port not writeable')
 
     def tx_packet(self, b):
-        b = list(b)
+        # b should be a bytearray
         crc = self.calc_crc(b)
-        b.append(crc & 0xFF)
-        b.append((crc >> 8) & 0xFF)
-        b_tx = [int(self.cmd['SOH'])]
+        b += bytes([crc & 0xFF])
+        b += bytes([(crc >> 8) & 0xFF])
+        b_tx = bytearray(self.ctrl['SOH'])
         for bb in b:
-            if bb == self.cmd['SOH'] or bb == self.cmd['EOT'] or bb == self.cmd['DLE']:
-                b_tx.append(self.cmd['DLE'])
-            b_tx.append(bb)
-        b_tx.append(self.cmd['EOT'])
-        print(b_tx)
-        self.tx(bytearray(b_tx))
+            bb = bytes([bb])
+            # Escape any control characters that appear in the TX buffer
+            if bb == self.ctrl['SOH'] or bb == self.ctrl['EOT'] or bb == self.ctrl['DLE']:
+                b_tx += self.ctrl['DLE']
+            b_tx += bb
+        b_tx += self.ctrl['EOT']
+        self.tx(b_tx)
 
     def __init__(self, port=None):
+        self.rx_state = self.rxfsm['RxIdle']
+        self.bl_state = self.blfsm['BlIdle']
+
         comports = []
         if port == None:
             comports_all = [comport for comport in serial.tools.list_ports.comports()]
@@ -122,6 +237,11 @@ class Tink:
             comports.append(port)
 
         if comports:
+            if len(comports) > 1:
+                print('Several FTDI devices detected - not sure which to target. Aborting.')
+                # TODO: Add interactive device selector?
+                sys.exit(-1)
+
             for com in comports:
                 try:
                     self.serial = serial.Serial(com, baudrate=115200, timeout=None, rtscts=True)
@@ -143,9 +263,13 @@ class Tink:
         else:
             sys.exit(-1)
 
-        retries=5
+        self.running = True
+
+        retries=1
         while retries and running:
             retries = retries - 1
+            self.blstate = self.blfsm['BlVersion']
+            print('Probing device... ', end='')
             self.tx_packet(self.cmd['CmdGetVer'])
             time.sleep(1)
 
@@ -154,7 +278,7 @@ if __name__ == '__main__':
 
     tink = Tink(COM_OVERRIDE)
 
-    while running:
+    while tink.running and running:
         time.sleep(0.1)
 
     on_closing()
