@@ -10,7 +10,7 @@ import time
 
 COM_OVERRIDE=None
 DEBUG=True
-VERSION=2
+VERSION=3
 
 running = True
 
