@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import intelhex
 import queue
 import serial
 import serial.tools.list_ports
@@ -100,16 +99,13 @@ class Tink:
                 if packet[0] == self.cmd['CmdErase']:
                     print('OKAY')
 
-                    self.hex_offset = 0
-                    self.hex_data = []
-                    self.hex_blocksz = 32
-                    # TODO: Populate hex_data
-                    # TODO: Check blocksz
+                    self.hex_line = 1
+                    self.fw_file = open(self.fw_name, 'r')
                     tx = bytearray(self.cmd['CmdWrite'])
-                    tx += self.hex_data[self.hex_offset:self.hex_offset + self.hex_blocksz]
-                    print('Writing firmware %d/%d... ' % (self.hex_offset, len(self.hex_data)), end='')
+                    hex_line = bytes.fromhex(self.fw_file.readline().rstrip()[1:-2])
+                    tx += hex_line
+                    print('Writing firmware %d/%d... ' % (self.hex_line, self.hex_nline), end='')
                     self.tx_packet(tx)
-                    self.hex_offset = self.hex_offset + self.hex_blocksz
                     self.bl_state = self.blfsm['BlWrite']
                 else:
                     print('ERROR: Unexpected response code')
@@ -117,17 +113,19 @@ class Tink:
             elif self.bl_state == self.blfsm['BlWrite']:
                 if packet[0] == self.cmd['CmdWrite']:
                     print('OKAY')
-                    if self.hex_offset >= len(self.hex_data):
+                    self.hex_line = self.hex_line + 1
+
+                    if self.hex_line == self.hex_nline:
                         print('Booting app... ', end='')
                         self.bl_state = self.blfsm['BlJump']
                         self.tx_packet(self.cmd['JumpApp'])
 
                     else:
                         tx = bytearray(self.cmd['CmdWrite'])
-                        tx += self.hex_data[self.hex_offset:self.hex_offset + self.hex_blocksz]
-                        print('Writing firmware %d/%d... ' % (self.hex_offset, len(self.hex_data)), end='')
+                        hex_line = bytes.fromhex(self.fw_file.readline().rstrip()[1:-2])
+                        tx += hex_line
+                        print('Writing firmware %d/%d... ' % (self.hex_line, self.hex_nline), end='')
                         self.tx_packet(tx)
-                        self.hex_offset = self.hex_offset + self.hex_blocksz
 
                 else:
                     print('ERROR: Unexpected response code')
@@ -223,9 +221,26 @@ class Tink:
         b_tx += self.ctrl['EOT']
         self.tx(b_tx)
 
-    def __init__(self, port=None):
+    def __init__(self, fw_name=None, port=None):
         self.rx_state = self.rxfsm['RxIdle']
         self.bl_state = self.blfsm['BlIdle']
+
+        self.fw_name = fw_name
+        self.hex_nline = 0
+        self.hex_line = 0
+
+        # Ensure the file exists, has valid Intel Hex checksums, and count lines
+        with open(self.fw_name) as fw_file:
+            for line in fw_file:
+                self.hex_nline = self.hex_nline + 1
+                line = line.rstrip()[1:]
+                checksum = bytes.fromhex(line[-2:])
+                data = bytes.fromhex(line[:-2])
+                s = bytes([((~(sum(data) & 0xFF) & 0xFF) + 1) & 0xFF])
+                
+                if checksum != s:
+                    print('%s is not a valid hex file, exiting' % sys.argv[1])
+                    sys.exit(-1)
 
         comports = []
         if port == None:
@@ -276,7 +291,11 @@ class Tink:
 if __name__ == '__main__':
     signal(SIGINT, sig_handler)
 
-    tink = Tink(COM_OVERRIDE)
+    if len(sys.argv) != 2:
+        print('Usage: %s firmware.hex' % (sys.argv[0]))
+        sys.exit(-1)
+
+    tink = Tink(fw_name=sys.argv[1], port=COM_OVERRIDE)
 
     while tink.running and running:
         time.sleep(0.1)
