@@ -9,8 +9,8 @@ import threading
 import time
 
 COM_OVERRIDE=None
-DEBUG=True
 VERSION=3
+DEBUG=True
 
 running = True
 
@@ -154,7 +154,7 @@ class Tink:
             elif b == self.ctrl['EOT']:
                 # End of transmission
                 self.rx_state = self.rxfsm['RxIdle']
-                rx_process(self.rxbuf)
+                self.rx_process(self.rxbuf)
 
             else:
                 # Buffer the byte
