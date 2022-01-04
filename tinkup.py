@@ -9,7 +9,7 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=5
+VERSION=6
 DEBUG=True
 
 running = True
@@ -51,7 +51,6 @@ class Tink:
 
     serial = None
     rx_state = rxfsm['RxIdle']
-    bl_state = blfsm['BlIdle']
 
     def timer(self, timestamp):
         # 100ms interval timer
@@ -82,7 +81,7 @@ class Tink:
         crc_rx = (packet[-1] << 8) | packet[-2]
         if self.calc_crc(packet[0:-2]) != crc_rx:
             print('Bad CRC received, resetting state')
-            self.bl_state == self.blfsm['BlIdle']
+            self.bl_state = self.blfsm['BlIdle']
 
         else:
             if self.bl_state == self.blfsm['BlVersion']:
@@ -137,7 +136,7 @@ class Tink:
                     print('Update complete')
                     on_closing()
             else:
-                print('Unhandled bootload state %d, quitting', % self.bl_state)
+                print('Unhandled bootload state %d, quitting' % self.bl_state)
                 on_closing()
 
     def rx_buffer(self, b, debug=DEBUG):
@@ -284,7 +283,7 @@ class Tink:
         self.running = True
 
         retries=1
-        self.blstate = self.blfsm['BlVersion']
+        self.bl_state = self.blfsm['BlVersion']
         while retries and running:
             retries = retries - 1
             print('Probing device... ', end='')
