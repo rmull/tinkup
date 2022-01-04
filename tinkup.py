@@ -9,7 +9,7 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=3
+VERSION=4
 DEBUG=True
 
 running = True
