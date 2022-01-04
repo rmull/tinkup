@@ -9,7 +9,7 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=4
+VERSION=5
 DEBUG=True
 
 running = True
@@ -136,6 +136,9 @@ class Tink:
                     print('OKAY')
                     print('Update complete')
                     on_closing()
+            else:
+                print('Unhandled bootload state %d, quitting', % self.bl_state)
+                on_closing()
 
     def rx_buffer(self, b, debug=DEBUG):
         state_begin = self.rx_state
@@ -281,9 +284,9 @@ class Tink:
         self.running = True
 
         retries=1
+        self.blstate = self.blfsm['BlVersion']
         while retries and running:
             retries = retries - 1
-            self.blstate = self.blfsm['BlVersion']
             print('Probing device... ', end='')
             self.tx_packet(self.cmd['CmdGetVer'])
             time.sleep(1)
