@@ -9,7 +9,7 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=6
+VERSION=8
 DEBUG=True
 
 running = True
@@ -84,18 +84,19 @@ class Tink:
             self.bl_state = self.blfsm['BlIdle']
 
         else:
+            cmd = bytes([packet[0])
             if self.bl_state == self.blfsm['BlVersion']:
-                if packet[0] == self.cmd['CmdGetVer']:
+                if cmd == self.cmd['CmdGetVer']:
                     print('Found device ID: %s' % packet[1:].decode().split('\x00')[0])
 
                     print('Erasing device... ', end='')
                     self.tx_packet(self.cmd['CmdErase'])
                     self.bl_state = self.blfsm['BlErase']
                 else:
-                    print('ERROR: Unexpected response code')
+                    print('ERROR: Expected response code CmdGetVer, got %s' % packet[0])
 
             elif self.bl_state == self.blfsm['BlErase']:
-                if packet[0] == self.cmd['CmdErase']:
+                if cmd == self.cmd['CmdErase']:
                     print('OKAY')
 
                     self.hex_line = 1
@@ -107,10 +108,10 @@ class Tink:
                     self.tx_packet(tx)
                     self.bl_state = self.blfsm['BlWrite']
                 else:
-                    print('ERROR: Unexpected response code')
+                    print('ERROR: Expected response code CmdErase, got %s' % packet[0])
 
             elif self.bl_state == self.blfsm['BlWrite']:
-                if packet[0] == self.cmd['CmdWrite']:
+                if cmd == self.cmd['CmdWrite']:
                     print('OKAY')
                     self.hex_line = self.hex_line + 1
 
@@ -127,14 +128,16 @@ class Tink:
                         self.tx_packet(tx)
 
                 else:
-                    print('ERROR: Unexpected response code')
+                    print('ERROR: Expected response code CmdWrite, got %s' % packet[0])
 
             elif self.bl_state == self.blfsm['BlJump']:
                 # TODO: Not sure yet whether JumpApp generates a response before booting
-                if packet[0] == self.cmd['JumpApp']:
+                if cmd == self.cmd['JumpApp']:
                     print('OKAY')
                     print('Update complete')
                     on_closing()
+                else:
+                    print('ERROR: Expected response code JumpApp, got %s' % packet[0])
             else:
                 print('Unhandled bootload state %d, quitting' % self.bl_state)
                 on_closing()
