@@ -9,7 +9,7 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=11
+VERSION=12
 DEBUG=True
 
 running = True
@@ -124,7 +124,7 @@ class Tink:
 
                     else:
                         tx = bytearray(self.cmd['CmdWrite'])
-                        hex_line = bytes.fromhex(self.fw_file.readline().rstrip()[1:-2])
+                        hex_line = bytes.fromhex(self.fw_file.readline().rstrip()[1:])
                         tx += hex_line
                         print('Writing firmware %d/%d... ' % (self.hex_line, self.hex_nline), end='')
                         self.tx_packet(tx)
