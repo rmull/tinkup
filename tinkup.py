@@ -9,7 +9,7 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=8
+VERSION=11
 DEBUG=True
 
 running = True
@@ -17,9 +17,10 @@ running = True
 def on_closing():
     global running
     running = False
+    print('Quitting')
 
 def sig_handler(signal_received, frame):
-    print('Got SIGINT, quitting')
+    print('Got SIGINT')
     on_closing()
 
 class Tink:
@@ -84,10 +85,11 @@ class Tink:
             self.bl_state = self.blfsm['BlIdle']
 
         else:
-            cmd = bytes([packet[0])
+            cmd = bytes([packet[0]])
+            payload = packet[1:-2]
             if self.bl_state == self.blfsm['BlVersion']:
                 if cmd == self.cmd['CmdGetVer']:
-                    print('Found device ID: %s' % packet[1:].decode().split('\x00')[0])
+                    print('Found device ID: %s' % payload.decode().split('\x00')[0])
 
                     print('Erasing device... ', end='')
                     self.tx_packet(self.cmd['CmdErase'])
@@ -102,7 +104,7 @@ class Tink:
                     self.hex_line = 1
                     self.fw_file = open(self.fw_name, 'r')
                     tx = bytearray(self.cmd['CmdWrite'])
-                    hex_line = bytes.fromhex(self.fw_file.readline().rstrip()[1:-2])
+                    hex_line = bytes.fromhex(self.fw_file.readline().rstrip()[1:])
                     tx += hex_line
                     print('Writing firmware %d/%d... ' % (self.hex_line, self.hex_nline), end='')
                     self.tx_packet(tx)
@@ -186,15 +188,11 @@ class Tink:
     def rx(self):
         while running:
             if self.serial:
-                try:
-                    b = self.serial.read(1)
-                    if b:
-                        self.rx_buffer(b)
-                    else:
-                        print('RX timeout?')
-                except:
-                    print('Serial device failure, quitting')
-                    on_closing()
+                b = self.serial.read(1)
+                if b:
+                    self.rx_buffer(b)
+                else:
+                    print('RX timeout?')
             else:
                 print('Lost serial port')
                 time.sleep(1)
