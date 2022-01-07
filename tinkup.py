@@ -9,9 +9,9 @@ import threading
 import time
 
 COM_OVERRIDE=None
-VERSION=12
-DEBUG=True
+VERSION=13
 
+DEBUG=False
 running = True
 
 def on_closing():
@@ -117,10 +117,15 @@ class Tink:
                     print('OKAY')
                     self.hex_line = self.hex_line + 1
 
-                    if self.hex_line == self.hex_nline:
-                        print('Booting app... ', end='')
+                    # hex_line starts at 1, so we need to send up to and
+                    # including hex_nline
+                    if self.hex_line > self.hex_nline:
+                        print('Update complete, booting firmware')
                         self.bl_state = self.blfsm['BlJump']
                         self.tx_packet(self.cmd['JumpApp'])
+                        # There doesnt seem to be a response to the JumpApp
+                        # command, so at this point we're done.
+                        self.running = False
 
                     else:
                         tx = bytearray(self.cmd['CmdWrite'])
@@ -131,18 +136,6 @@ class Tink:
 
                 else:
                     print('ERROR: Expected response code CmdWrite, got %s' % packet[0])
-
-            elif self.bl_state == self.blfsm['BlJump']:
-                # TODO: Not sure yet whether JumpApp generates a response before booting
-                if cmd == self.cmd['JumpApp']:
-                    print('OKAY')
-                    print('Update complete')
-                    on_closing()
-                else:
-                    print('ERROR: Expected response code JumpApp, got %s' % packet[0])
-            else:
-                print('Unhandled bootload state %d, quitting' % self.bl_state)
-                on_closing()
 
     def rx_buffer(self, b, debug=DEBUG):
         state_begin = self.rx_state
@@ -264,7 +257,6 @@ class Tink:
                 try:
                     self.serial = serial.Serial(com, baudrate=115200, timeout=None, rtscts=True)
                     print('Opened device at %s' % com)
-                    self.running = True
                 except:
                     print('Could not open device at %s' % com)
         else:
