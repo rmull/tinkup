@@ -41,14 +41,20 @@ here on Github and we'll see what we can do to improve this software.
 
 See [Python.org](https://www.python.org) for installation details.
 
+Windows users: Check the optional box for "Adding Python to PATH" during the
+installation wizard. This allows the python executable to be accessed from the
+command line without needing to specify its absolute path.
+
 - pySerial
 
 Install with Python's package manager pip from a command line:
 
-`python -m pip install pyserial`
+`python3 -m pip install pyserial`
 
-Note that `python` here will need to be Python 3. If you have several versions
-of Python installed, use the one that will be used to run tinkup.py.
+Your system might have Python 3 installed simply as `python` rather than
+`python3`, so try that if `python3` is not found. If neither are found, please
+double check your Python installation, and Windows users should note the "Add
+Python to PATH" requirement mentioned above.
 
 More info about pySerial [here](https://github.com/pyserial/pyserial).
 
@@ -72,7 +78,10 @@ procedure can be seen on [YouTube](https://www.youtube.com/watch?v=Bva0JXLoq7E).
 3. Run tinkup.py with a path to your firmware hex file specified as the only
 argument:
 
-`python tinkup.py firmware.hex`
+`python3 tinkup.py firmware.hex`
+
+As with the pySerial installation, if your system has installed Python 3 simply
+named `python`, use that instead of `python3`.
 
 tinkup should automatically identify your RetroTINK and proceed with the
 update. It will print an error if it can't identify your RetroTINK or if it
