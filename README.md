@@ -33,9 +33,6 @@ This project does not handle general RetroTINK support requests. If something
 goes wrong specifically while using tinkup.py, please feel free to reach out
 here on Github and we'll see what we can do to improve this software.
 
-Use of this utility voids your RetroTINK warranty as noted on the RetroTINK
-blog. Everything is provided as-is and with no guarantees.
-
 ## Installation
 
 ### Dependencies
@@ -55,12 +52,21 @@ of Python installed, use the one that will be used to run tinkup.py.
 
 More info about pySerial [here](https://github.com/pyserial/pyserial).
 
+- Driver support for FTDI serial devices. This depends on your operating
+  system. If your RetroTINK is not detected by tinkup on the first try, look
+for the VCP drivers for your platform on the [FTDI
+website](https://ftdichip.com/drivers/vcp-drivers/). You shouldn't need to
+bother with these if attaching the RetroTINK in firmware update mode causes a
+new USB serial device to be detected by your OS.
+
 ## Usage
 
 1. Download the hex file for your specific model of RetroTINK by visiting the
 [RetroTINK Blog](https://www.retrotink.com/blog).
 
-2. Attach a USB cable between your host PC and the RetroTINK.
+2. Attach a USB cable between your host PC and the RetroTINK while holding the
+   correct button on the RetroTINK to put it in update mode. Details about this
+procedure can be seen on [YouTube](https://www.youtube.com/watch?v=Bva0JXLoq7E).
 
 3. Run tinkup.py with a path to your firmware hex file specified as the only
 argument:
