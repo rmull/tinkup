@@ -52,12 +52,13 @@ of Python installed, use the one that will be used to run tinkup.py.
 
 More info about pySerial [here](https://github.com/pyserial/pyserial).
 
-- Driver support for FTDI serial devices. This depends on your operating
-  system. If your RetroTINK is not detected by tinkup on the first try, look
-for the VCP drivers for your platform on the [FTDI
-website](https://ftdichip.com/drivers/vcp-drivers/). You shouldn't need to
-bother with these if attaching the RetroTINK in firmware update mode causes a
-new USB serial device to be detected by your OS.
+- Driver support for FTDI serial devices.
+
+This depends on your operating system. If your RetroTINK is not detected by
+tinkup on the first try, look for the VCP drivers for your platform on the
+[FTDI website](https://ftdichip.com/drivers/vcp-drivers/). You shouldn't need
+to bother with these if attaching the RetroTINK in firmware update mode causes
+a new USB serial device to be detected by your OS.
 
 ## Usage
 
