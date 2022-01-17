@@ -257,8 +257,9 @@ class Tink:
                 try:
                     self.serial = serial.Serial(com, baudrate=115200, timeout=None, rtscts=True)
                     print('Opened device at %s' % com)
-                except:
+                except Exception as ex:
                     print('Could not open device at %s' % com)
+                    print('Exception: %s' % ex)
         else:
             print('No RetroTINK devices found')
 
