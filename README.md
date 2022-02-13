@@ -66,6 +66,14 @@ tinkup on the first try, look for the VCP drivers for your platform on the
 to bother with these if attaching the RetroTINK in firmware update mode causes
 a new USB serial device to be detected by your OS.
 
+Linux users: You will need read/write permission on the serial device used to
+communicate with your RetroTINK, typically /dev/ttyUSB0. This can be achieved
+temporarily using `sudo` or running `tinkup.py` as root. A better way (but 
+dependent on distro support) may be to add your user to the "dialout" group
+with `sudo adduser username dialout`, then rebooting. This will grant your user
+indefinite access without requiring elevation to root if the dialout group has
+ownership of the serial device, which is a common default configuration.
+
 ## Usage
 
 1. Download the hex file for your specific model of RetroTINK by visiting the
