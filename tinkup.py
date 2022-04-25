@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-import queue
 import serial
 import serial.tools.list_ports
 from signal import signal, SIGINT
 import sys
-import threading
+from threading import Thread, Timer
 import time
 
 COM_OVERRIDE=None
@@ -14,14 +13,10 @@ VERSION='1.0'
 DEBUG=False
 running = True
 
-def on_closing():
+def sig_handler(signal_received, frame):
     global running
     running = False
     print('Quitting')
-
-def sig_handler(signal_received, frame):
-    print('Got SIGINT')
-    on_closing()
 
 class Tink:
     cmd = {
@@ -29,18 +24,18 @@ class Tink:
             'CmdErase':     b'\x02',
             'CmdWrite':     b'\x03',
             'JumpApp':      b'\x05',
-            }
+    }
     ctrl = {
             'SOH':          b'\x01',
             'EOT':          b'\x04',
             'DLE':          b'\x10',
-            }
+    }
     
     rxfsm = {
             'RxIdle':       0,
             'RxBuffer':     1,
             'RxEscape':     2,
-            }
+    }
 
     blfsm = {
             'BlIdle':       0,
@@ -48,24 +43,23 @@ class Tink:
             'BlErase':      2,
             'BlWrite':      3,
             'BlJump':       4,
-            }
+    }
 
     serial = None
     rx_state = rxfsm['RxIdle']
 
     def timer(self, timestamp):
+        # TODO: Use to implement retries
         # 100ms interval timer
         if running:
             timestamp += 0.1
-            self.timer_thread = threading.Timer(timestamp - time.time(), self.timer, args=(timestamp,)).start()
+            self.timer_thread = Timer(timestamp - time.time(), self.timer, args=(timestamp,)).start()
 
     def calc_crc(self, b):
-        # NOTE: This is the CRC lookup table for polynomial 0x1021
+        # This is the CRC lookup table for polynomial 0x1021
         lut = [
-            0, 4129, 8258, 12387,\
-            16516, 20645, 24774, 28903,\
-            33032, 37161, 41290, 45419,\
-            49548, 53677, 57806, 61935]
+            0, 4129, 8258, 12387, 16516, 20645, 24774, 28903,\
+            33032, 37161, 41290, 45419, 49548, 53677, 57806, 61935]
 
         num1 = 0
         for num2 in b:
@@ -179,7 +173,7 @@ class Tink:
 
 
     def rx(self):
-        while running:
+        while self.running:
             if self.serial:
                 b = self.serial.read(1)
                 if b:
@@ -217,26 +211,45 @@ class Tink:
         b_tx += self.ctrl['EOT']
         self.tx(b_tx)
 
+    # Returns -1 if the hex file is invalid; otherwise, returns the number of lines
+    def hex_validate_and_count(self, fw_path):
+        # Ensure the file exists, has valid Intel Hex checksums, and count lines
+        hex_nline = 0
+        try:
+            hex_okay = True
+            with open(fw_path) as fw_file:
+                for line in fw_file:
+                    hex_nline = hex_nline + 1
+                    line = line.rstrip()[1:]
+                    checksum = bytes.fromhex(line[-2:])
+                    data = bytes.fromhex(line[:-2])
+                    s = bytes([((~(sum(data) & 0xFF) & 0xFF) + 1) & 0xFF])
+                    
+                    if checksum != s:
+                        hex_okay = False
+                        break
+        except:
+            hex_okay = False
+
+        if hex_okay:
+            return hex_nline
+        else:
+            return -1
+
+    def cancel(self):
+        self.running = False
+
     def __init__(self, fw_name=None, port=None):
         self.rx_state = self.rxfsm['RxIdle']
         self.bl_state = self.blfsm['BlIdle']
 
         self.fw_name = fw_name
-        self.hex_nline = 0
         self.hex_line = 0
 
-        # Ensure the file exists, has valid Intel Hex checksums, and count lines
-        with open(self.fw_name) as fw_file:
-            for line in fw_file:
-                self.hex_nline = self.hex_nline + 1
-                line = line.rstrip()[1:]
-                checksum = bytes.fromhex(line[-2:])
-                data = bytes.fromhex(line[:-2])
-                s = bytes([((~(sum(data) & 0xFF) & 0xFF) + 1) & 0xFF])
-                
-                if checksum != s:
-                    print('%s is not a valid hex file, exiting' % sys.argv[1])
-                    sys.exit(-1)
+        self.hex_nline = self.hex_validate_and_count(fw_name)
+        if self.hex_nline < 0:
+            print('%s is not a valid hex file' % fw_name)
+            sys.exit(-1)
 
         comports = []
         if port == None:
@@ -247,27 +260,27 @@ class Tink:
         else:
             comports.append(port)
 
-        if comports:
+        if len(comports) != 1:
             if len(comports) > 1:
-                print('Several FTDI devices detected - not sure which to target. Aborting.')
                 # TODO: Add interactive device selector?
-                sys.exit(-1)
-
-            for com in comports:
-                try:
-                    self.serial = serial.Serial(com, baudrate=115200, timeout=None, rtscts=True)
-                    print('Opened device at %s' % com)
-                except:
-                    print('Could not open device at %s' % com)
-        else:
-            print('No RetroTINK devices found')
+                print('Several FTDI devices detected - not sure which to target. Aborting.')
+            elif len(comports) == 0:
+                print('No RetroTINK devices found')
+            sys.exit(-1)
+            
+        try:
+            self.serial = serial.Serial(comports[0], baudrate=115200, timeout=None, rtscts=True)
+            print('Opened device at %s' % comports[0])
+        except:
+            print('Could not open device at %s' % comports[0])
+            sys.exit(-1)
 
         if self.serial:
-            self.rx_process_thread = threading.Thread(target=self.rx, args=())
+            self.rx_process_thread = Thread(target=self.rx, args=())
             self.rx_process_thread.daemon = True
             self.rx_process_thread.start()
 
-            self.timer_thread = threading.Thread(target=self.timer, args=(time.time() + 0.1,))
+            self.timer_thread = Thread(target=self.timer, args=(time.time() + 0.1,))
             self.timer_thread.daemon = True
             self.timer_thread.start()
         else:
@@ -275,13 +288,15 @@ class Tink:
 
         self.running = True
 
-        retries=1
         self.bl_state = self.blfsm['BlVersion']
-        while retries and running:
-            retries = retries - 1
-            print('Probing device... ', end='')
-            self.tx_packet(self.cmd['CmdGetVer'])
-            time.sleep(1)
+        print('Probing device... ', end='')
+        self.tx_packet(self.cmd['CmdGetVer'])
+
+        # TODO: We don't need this I think?
+        # TODO: We don't want to depend on the global running either
+        # What keeps the Tink object from disappearing?
+        while self.running:
+            time.sleep(0.1)
 
 if __name__ == '__main__':
     signal(SIGINT, sig_handler)
@@ -292,8 +307,8 @@ if __name__ == '__main__':
 
     tink = Tink(fw_name=sys.argv[1], port=COM_OVERRIDE)
 
-    while tink.running and running:
+    while running and tink.running:
         time.sleep(0.1)
 
-    on_closing()
+    tink.cancel()
 
