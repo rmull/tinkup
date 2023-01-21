@@ -110,6 +110,7 @@ class Tink:
                 if cmd == self.cmd['CmdWrite']:
                     print('OKAY')
                     self.hex_line = self.hex_line + 1
+                    self.progress = self.hex_line / self.hex_nline
 
                     # hex_line starts at 1, so we need to send up to and
                     # including hex_nline
@@ -236,6 +237,9 @@ class Tink:
         else:
             return -1
 
+    def progress(self):
+        return self.progress
+
     def cancel(self):
         self.running = False
 
@@ -246,33 +250,18 @@ class Tink:
         self.fw_name = fw_name
         self.hex_line = 0
 
+        self.progress = 0
+
         self.hex_nline = self.hex_validate_and_count(fw_name)
         if self.hex_nline < 0:
             print('%s is not a valid hex file' % fw_name)
             sys.exit(-1)
 
-        comports = []
-        if port == None:
-            comports_all = [comport for comport in serial.tools.list_ports.comports()]
-            for com in comports_all:
-                if com.manufacturer == 'FTDI':
-                    comports.append(com.device)
-        else:
-            comports.append(port)
-
-        if len(comports) != 1:
-            if len(comports) > 1:
-                # TODO: Add interactive device selector?
-                print('Several FTDI devices detected - not sure which to target. Aborting.')
-            elif len(comports) == 0:
-                print('No RetroTINK devices found')
-            sys.exit(-1)
-            
         try:
-            self.serial = serial.Serial(comports[0], baudrate=115200, timeout=None, rtscts=True)
-            print('Opened device at %s' % comports[0])
+            self.serial = serial.Serial(port, baudrate=115200, timeout=None, rtscts=True)
+            print('Opened device at %s' % port)
         except:
-            print('Could not open device at %s' % comports[0])
+            print('Could not open device at %s' % port)
             sys.exit(-1)
 
         if self.serial:
@@ -305,7 +294,27 @@ if __name__ == '__main__':
         print('Usage: %s firmware.hex' % (sys.argv[0]))
         sys.exit(-1)
 
-    tink = Tink(fw_name=sys.argv[1], port=COM_OVERRIDE)
+    comports = []
+    if COM_OVERRIDE == None:
+        if port == None:
+            comports_all = [comport for comport in serial.tools.list_ports.comports()]
+            for com in comports_all:
+                if com.manufacturer == 'FTDI':
+                    comports.append(com.device)
+        else:
+            comports.append(port)
+
+        if len(comports) != 1:
+            if len(comports) > 1:
+                # TODO: Add interactive device selector?
+                print('Several FTDI devices detected - not sure which to target. Aborting.')
+            elif len(comports) == 0:
+                print('No RetroTINK devices found')
+            sys.exit(-1)
+    else:
+        comports[0] = COM_OVERRIDE
+
+    tink = Tink(fw_name=sys.argv[1], port=comports[0])
 
     while running and tink.running:
         time.sleep(0.1)
