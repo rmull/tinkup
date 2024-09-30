@@ -79,7 +79,7 @@ command (substitute your username for "youruser") and then reboot:
 ## Usage
 
 1. Download the hex file for your specific model of RetroTINK by visiting the
-[RetroTINK Blog](https://www.retrotink.com/blog).
+[RetroTINK Firmware Repository](https://retrotink-llc.github.io/firmware/).
 
 2. Attach a USB cable between your host PC and the RetroTINK while holding the
    correct button on the RetroTINK to put it in update mode. Details about this
@@ -95,6 +95,6 @@ named `python`, use that instead of `python3`.
 
 tinkup should automatically identify your RetroTINK and proceed with the
 update. It will print an error if it can't identify your RetroTINK or if it
-detects several RetroTINKs connected to the same system (since it doesn't know
-which one it should be updating).
+detects several RetroTINKs or similar devices connected to the same system 
+(since it doesn't know which one it should be updating).
 
